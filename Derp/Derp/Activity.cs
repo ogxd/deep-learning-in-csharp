@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System;
 using System.Diagnostics;
 using System.Linq;
+using System.Text;
 
 namespace Ogee.AI.Derp {
 
@@ -96,7 +97,7 @@ namespace Ogee.AI.Derp {
             }
         }
 
-        const double E = 0.001;
+        const double E = 0.00001;
 
         public bool isConvergent(double[] input, double[] output, int iterations = 100) {
             for (int i = 0; i < iterations; i++) {
@@ -110,33 +111,47 @@ namespace Ogee.AI.Derp {
             public TimeSpan trainingTime;
             public int trainings;
             public int bestSeed;
+
+            public override string ToString() {
+                StringBuilder strbldr = new StringBuilder();
+                strbldr.AppendLine("#--- Training Results ---#");
+                strbldr.AppendLine("Convergence : " + convergence);
+                strbldr.AppendLine("Training Time : " + trainingTime);
+                strbldr.AppendLine("Trainings : " + trainings);
+                strbldr.AppendLine("Best Seed : " + bestSeed);
+                return strbldr.ToString();
+            }
         }
 
-        public ActivityTrainingResult think(TrainingInputPicker getTrainingInput, TimeSpan timeOut) {
+        public ActivityTrainingResult think(TrainingInputPicker getTrainingInput, TimeSpan timeOut, int startPoint = 1000) {
+
             double[] input;
             double[] output;
+
             // Calibrating the seed
             // This operation is necessary to better optimize the starting point.
             // Without this, weights at initialization might make the model converge towards a bad solution.
             int s = 0;
+            int trainingsPerCalibration = 100;
             Dictionary<int, double> seeds = new Dictionary<int, double>();
             Random seedGenerator = new Random();
-            for (int i = 0; i < 1000; i++) {
+            for (int i = 0; i < startPoint; i++) {
                 int seed = seedGenerator.Next(int.MinValue, int.MaxValue);
                 if (seeds.ContainsKey(seed))
                     continue;
-                for (int j = 0; j < 100; j++) {
+                for (int j = 0; j < trainingsPerCalibration; j++) {
                     initializeWeights(true, seed);
-                    getTrainingInput(j, out input, out output);
-                    train(input, output);
-                    if (j % 10 == 0) {
+                    getTrainingInput(j, out input, out output); // Picking a training data set
+                    train(input, output); // Training (this is not the actual training, weights are changed afterwards)
+                    if (j % (trainingsPerCalibration / 10) == 0) {
                         if (_convergence < 1 + E && _convergence > 1 - E) {
                             seeds.Add(seed, previousError); // Add the error for this seed
-                            break;
+                            goto startPointChecked;
                         }
                     }
                 }
                 seeds.Add(seed, double.MaxValue);
+                startPointChecked:;
             }
             int bestSeed = 0;
             double min = double.MaxValue;
@@ -146,15 +161,16 @@ namespace Ogee.AI.Derp {
                     bestSeed = pair.Key;
                 }
             }
-            initializeWeights(true, bestSeed);
+            initializeWeights(true, bestSeed); // Initialize the weights for this better start point
 
             // Training
+            // Will stop learning if it converges already or if it went timeout 
             int trainings = 0;
             double maxMs = timeOut.TotalMilliseconds;
             Stopwatch sw = Stopwatch.StartNew();
             while (true) {
-                getTrainingInput(trainings, out input, out output);
-                train(input, output);
+                getTrainingInput(trainings, out input, out output); // Picking a training data set
+                train(input, output); // Training
                 if (trainings % 100 == 0) {
                     if (_convergence < 1 + E && _convergence > 1 - E) {
                         break;
@@ -165,6 +181,7 @@ namespace Ogee.AI.Derp {
                 trainings++;
             }
             sw.Stop();
+
             return new ActivityTrainingResult() {
                 convergence = _convergence,
                 trainingTime = TimeSpan.FromMilliseconds(sw.ElapsedMilliseconds),
