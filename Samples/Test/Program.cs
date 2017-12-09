@@ -12,11 +12,11 @@ class Program {
         Stopwatch sw = Stopwatch.StartNew();
 
         Activity activity = ActivityManager.CreateActivity("Test", 6, 2, 4);
+        activity.bias = 0;
 
-        for (int i = 0; i < 128; i++) {
+        for (int i = 0; i < 100; i++) {
             activity.train(input, output);
-            Console.WriteLine("Convergence : {0}", activity.convergence);
-            Console.WriteLine("QI : {0}", activity.QI);
+            Console.WriteLine("Error : {0}", activity.previousError);
         }
 
         Console.WriteLine("Done in {0} ms", sw.ElapsedMilliseconds);

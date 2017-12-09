@@ -45,7 +45,7 @@ namespace Ogee.AI.Derp {
         public double QI => QI_MAX * (_sigmoid(0.01 / _previousError));
 
         private const int SIGMOID_STEEPNESS = 1;
-        private const int BIAS = 1;
+        public int bias = 1;
 
         public Activity(int inputLength, int outputLength, params int[] hiddenLayersLengths) {
             initializeNeuralNetwork(inputLength, outputLength, hiddenLayersLengths);
@@ -73,7 +73,8 @@ namespace Ogee.AI.Derp {
                 weights[i] = new double[neurons[i + 1].Length][];
                 for (int j = 0; j < neurons[i + 1].Length; j++) {
                     // Initialize Weights from Neurons at i to Neurons at i + 1
-                    weights[i][j] = random.GetRandomArray(neurons[i].Length, -4d / neurons[i].Length, 4d / neurons[i].Length);
+                    //weights[i][j] = random.GetRandomArray(neurons[i].Length, -4d / neurons[i].Length, 4d / neurons[i].Length);
+                    weights[i][j] = Extensions.GetFilledArray(neurons[i].Length, 0.5d);
                 }
             }
         }
@@ -124,7 +125,7 @@ namespace Ogee.AI.Derp {
             for (int i = neurons.Length - 1; i > 0; i--) {
                 for (int j = 0; j < neurons[i].Length; j++) {
                     for (int k = 0; k < weights[i - 1][j].Length; k++) {
-                        weights[i - 1][j][k] += neurons[i][j] * deltas[i][j];
+                        weights[i - 1][j][k] += neurons[i - 1][k] * deltas[i][j];
                     }
                 }
             }
@@ -138,7 +139,7 @@ namespace Ogee.AI.Derp {
                 neurons[0][i] = inputs[i];
             }
             // Set first Bias
-            neurons[0][neurons[0].Length - 1] = BIAS;
+            neurons[0][neurons[0].Length - 1] = bias;
             // Propagate Neurons
             for (int i = 0; i < weights.Length; i++) {
                 for (int j = 0; j < weights[i].Length; j++) {
@@ -149,7 +150,8 @@ namespace Ogee.AI.Derp {
                     neurons[i + 1][j] = _sigmoid(value);
                 }
                 // Set subsequent Bias
-                neurons[i + 1][neurons[i + 1].Length - 1] = BIAS;
+                if (i < neurons.Length - 2)
+                    neurons[i + 1][neurons[i + 1].Length - 1] = bias;
             }
             return neurons[neurons.Length - 1];
         }

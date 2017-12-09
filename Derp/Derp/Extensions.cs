@@ -29,5 +29,12 @@ namespace Ogee.AI.Derp {
                 output[i] = random.NextDouble() * (maximum - minimum) + minimum;
             return output;
         }
+
+        public static double[] GetFilledArray(int length, double value) {
+            double[] output = new double[length];
+            for (int i = 0; i < output.Length; i++)
+                output[i] = value;
+            return output;
+        }
     }
 }

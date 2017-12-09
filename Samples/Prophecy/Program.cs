@@ -38,6 +38,7 @@ class Program {
         Random rnd = new Random();
 
         Activity activity = ActivityManager.CreateActivity("Prophecy", daysToLearn, daysToPredict, 31);
+        activity.bias = 1;
 
         int trainings = 1000000;
         int percents = 0;
