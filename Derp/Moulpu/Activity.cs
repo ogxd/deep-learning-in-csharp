@@ -1,8 +1,6 @@
 ﻿
 using System.Collections.Generic;
 using System;
-using System.Diagnostics;
-using System.Linq;
 
 namespace Ogee.AI.Derp {
 
@@ -22,10 +20,12 @@ namespace Ogee.AI.Derp {
 
     public class Activity {
 
-        public delegate void TrainingInputPicker(int inputIndex, out double[] input, out double[] output);
-
         private const double COST_EXPONENT = 1;
         private const double QI_MAX = 160;
+        // Guarantees same results on each run (nice for debugging)
+        private const int RANDOM_SEED = 32145;
+
+        private Random random = new Random(RANDOM_SEED);
 
         private double[][] neurons;
         private double[][][] weights;
@@ -45,7 +45,7 @@ namespace Ogee.AI.Derp {
         public double QI => QI_MAX * (_sigmoid(0.01 / _previousError));
 
         private const int SIGMOID_STEEPNESS = 1;
-        public int bias = 1;
+        private const int BIAS = 1;
 
         public Activity(int inputLength, int outputLength, params int[] hiddenLayersLengths) {
             initializeNeuralNetwork(inputLength, outputLength, hiddenLayersLengths);
@@ -68,109 +68,14 @@ namespace Ogee.AI.Derp {
             }
 
             //-- WEIGHTS --
-            initializeWeights(false);
-        }
-
-        /// <summary>
-        /// Initialize all weights.
-        /// Value used
-        /// </summary>
-        /// <param name="seed"></param>
-        public void initializeWeights(bool randomWeights, int seed = 0) {
             weights = new double[neurons.Length - 1][][];
-            if (randomWeights) {
-                Random random = new Random(seed);
-                for (int i = 0; i < weights.Length; i++) {
-                    weights[i] = new double[neurons[i + 1].Length][];
-                    for (int j = 0; j < neurons[i + 1].Length; j++) {
-                        weights[i][j] = random.GetRandomArray(neurons[i].Length, -4d / neurons[i].Length, 4d / neurons[i].Length);
-                    }
-                }
-            } else {
-                for (int i = 0; i < weights.Length; i++) {
-                    weights[i] = new double[neurons[i + 1].Length][];
-                    for (int j = 0; j < neurons[i + 1].Length; j++) {
-                        weights[i][j] = Extensions.GetFilledArray(neurons[i].Length, 0d);
-                    }
+            for (int i = 0; i < weights.Length; i++) {
+                weights[i] = new double[neurons[i + 1].Length][];
+                for (int j = 0; j < neurons[i + 1].Length; j++) {
+                    // Initialize Weights from Neurons at i to Neurons at i + 1
+                    weights[i][j] = random.GetRandomArray(neurons[i].Length, -4d / neurons[i].Length, 4d / neurons[i].Length);
                 }
             }
-        }
-
-        const double E = 0.001;
-
-        public bool isConvergent(double[] input, double[] output, int iterations = 100) {
-            for (int i = 0; i < iterations; i++) {
-                train(input, output);
-            }
-            return (convergence < 1 + E && convergence > 1 - E);
-        }
-
-        public class ActivityTrainingResult {
-            public double convergence;
-            public TimeSpan trainingTime;
-            public int trainings;
-            public int bestSeed;
-        }
-
-        public ActivityTrainingResult think(TrainingInputPicker getTrainingInput, TimeSpan timeOut) {
-            double[] input;
-            double[] output;
-            // Calibrating the seed
-            // This operation is necessary to better optimize the starting point.
-            // Without this, weights at initialization might make the model converge towards a bad solution.
-            int s = 0;
-            Dictionary<int, double> seeds = new Dictionary<int, double>();
-            Random seedGenerator = new Random();
-            for (int i = 0; i < 1000; i++) {
-                int seed = seedGenerator.Next(int.MinValue, int.MaxValue);
-                if (seeds.ContainsKey(seed))
-                    continue;
-                for (int j = 0; j < 100; j++) {
-                    initializeWeights(true, seed);
-                    getTrainingInput(j, out input, out output);
-                    train(input, output);
-                    if (j % 10 == 0) {
-                        if (_convergence < 1 + E && _convergence > 1 - E) {
-                            seeds.Add(seed, previousError); // Add the error for this seed
-                            break;
-                        }
-                    }
-                }
-                seeds.Add(seed, double.MaxValue);
-            }
-            int bestSeed = 0;
-            double min = double.MaxValue;
-            foreach (KeyValuePair<int, double> pair in seeds) {
-                if (pair.Value < min) {
-                    min = pair.Value;
-                    bestSeed = pair.Key;
-                }
-            }
-            initializeWeights(true, bestSeed);
-
-            // Training
-            int trainings = 0;
-            double maxMs = timeOut.TotalMilliseconds;
-            Stopwatch sw = Stopwatch.StartNew();
-            while (true) {
-                getTrainingInput(trainings, out input, out output);
-                train(input, output);
-                if (trainings % 100 == 0) {
-                    if (_convergence < 1 + E && _convergence > 1 - E) {
-                        break;
-                    } else if (sw.ElapsedMilliseconds > maxMs) {
-                        break;
-                    }
-                }
-                trainings++;
-            }
-            sw.Stop();
-            return new ActivityTrainingResult() {
-                convergence = _convergence,
-                trainingTime = TimeSpan.FromMilliseconds(sw.ElapsedMilliseconds),
-                trainings = trainings,
-                bestSeed = bestSeed,
-            };
         }
 
         private int _trainings = 0;
@@ -219,7 +124,7 @@ namespace Ogee.AI.Derp {
             for (int i = neurons.Length - 1; i > 0; i--) {
                 for (int j = 0; j < neurons[i].Length; j++) {
                     for (int k = 0; k < weights[i - 1][j].Length; k++) {
-                        weights[i - 1][j][k] += neurons[i - 1][k] * deltas[i][j];
+                        weights[i - 1][j][k] += neurons[i][j] * deltas[i][j];
                     }
                 }
             }
@@ -233,7 +138,7 @@ namespace Ogee.AI.Derp {
                 neurons[0][i] = inputs[i];
             }
             // Set first Bias
-            neurons[0][neurons[0].Length - 1] = bias;
+            neurons[0][neurons[0].Length - 1] = BIAS;
             // Propagate Neurons
             for (int i = 0; i < weights.Length; i++) {
                 for (int j = 0; j < weights[i].Length; j++) {
@@ -244,8 +149,7 @@ namespace Ogee.AI.Derp {
                     neurons[i + 1][j] = _sigmoid(value);
                 }
                 // Set subsequent Bias
-                if (i < neurons.Length - 2)
-                    neurons[i + 1][neurons[i + 1].Length - 1] = bias;
+                neurons[i + 1][neurons[i + 1].Length - 1] = BIAS;
             }
             return neurons[neurons.Length - 1];
         }
@@ -257,7 +161,7 @@ namespace Ogee.AI.Derp {
                 error += Math.Pow(Math.Abs(expected[i] - result[i]), COST_EXPONENT);
             }
             error /= result.Length; // Mean
-            _convergence = error / _previousError;
+            _convergence = _previousError - error;
             _previousError = error;
             return error;
         }

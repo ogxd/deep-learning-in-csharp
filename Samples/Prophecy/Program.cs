@@ -45,14 +45,15 @@ class Program {
         double mod = (1d * trainings / 100d);
 
         for (int i = 0; i < trainings; i++) {
-            //int sessionPos = bitcoinIndexesPerDay.Length - daysToPredict; // To check convergence
-            int sessionPos = rnd.Next(daysToLearn, bitcoinIndexesPerDay.Length - daysToPredict);
+            int sessionPos = bitcoinIndexesPerDay.Length - daysToPredict; // To check convergence
+            //int sessionPos = rnd.Next(daysToLearn, bitcoinIndexesPerDay.Length - daysToPredict);
             double[] input = bitcoinIndexesPerDay.Skip(sessionPos - daysToLearn).Take(daysToLearn).ToArray();
             double[] output = bitcoinIndexesPerDay.Skip(sessionPos).Take(daysToPredict).ToArray();
             activity.train(input, output);
             if (i % mod == 0) {
                 Console.WriteLine("Progress : {0}%", percents);
                 Console.WriteLine("Error : {0}", activity.previousError);
+                Console.WriteLine("Convergence : {0}", activity.convergence);
                 percents++;
             }
         }
