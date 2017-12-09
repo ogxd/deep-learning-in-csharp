@@ -22,6 +22,7 @@ namespace Ogee.AI.Moulpu {
 
         private const double COST_EXPONENT = 1;
         private const double QI_MAX = 160;
+        // Guarantees same results on each run (nice for debugging)
         private const int RANDOM_SEED = 32145;
 
         private Random random = new Random(RANDOM_SEED);
@@ -51,6 +52,10 @@ namespace Ogee.AI.Moulpu {
         }
 
         public void initializeNeuralNetwork(int inputLength, int outputLength, int[] hiddenLayersSizes) {
+            //-- BIAISES --
+            inputLength++;
+            hiddenLayersSizes.Add(1);
+
             //-- NEURONS --
             // Number or columns of neurons
             neurons = new double[hiddenLayersSizes.Length + 2][];
@@ -58,8 +63,9 @@ namespace Ogee.AI.Moulpu {
             neurons[0] = new double[inputLength];
             neurons[neurons.Length - 1] = new double[outputLength];
             // Initialize Neurons for each Hidden Layer
-            for (int i = 1; i < neurons.Length - 1; i++)
+            for (int i = 1; i < neurons.Length - 1; i++) {
                 neurons[i] = new double[hiddenLayersSizes[i - 1]];
+            }
 
             //-- WEIGHTS --
             weights = new double[neurons.Length - 1][][];
@@ -126,13 +132,13 @@ namespace Ogee.AI.Moulpu {
             _trainings++;
         }
 
-        bool useBiais = true;
-
-        double[][] biaisWeights;
-
         public double[] guess(double[] inputs) {
             // Inject input as first Neurons
-            neurons[0] = inputs;
+            for (int i = 0; i <inputs.Length; i++) {
+                neurons[0][i] = inputs[i];
+            }
+            // Set first Bias
+            neurons[0][neurons[0].Length - 1] = BIAS;
             // Propagate Neurons
             for (int i = 0; i < weights.Length; i++) {
                 for (int j = 0; j < weights[i].Length; j++) {
@@ -142,6 +148,8 @@ namespace Ogee.AI.Moulpu {
                     }
                     neurons[i + 1][j] = _sigmoid(value);
                 }
+                // Set subsequent Bias
+                neurons[i + 1][neurons[i + 1].Length - 1] = BIAS;
             }
             return neurons[neurons.Length - 1];
         }

@@ -17,6 +17,12 @@ namespace Ogee.AI.Moulpu {
             }
         }
 
+        public static void Add(this int[] array, int count) {
+            for (int j = 0; j < array.Length; j++) {
+                array[j] += count;
+            }
+        }
+
         public static double[] GetRandomArray(this Random random, int length, double minimum, double maximum) {
             double[] output = new double[length];
             for (int i = 0; i < output.Length; i++)
