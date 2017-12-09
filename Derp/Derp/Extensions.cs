@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace Ogee.AI.Moulpu {
+namespace Ogee.AI.Derp {
 
     public static class Extensions {
 
