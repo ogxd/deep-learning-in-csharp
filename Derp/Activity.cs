@@ -7,20 +7,6 @@ using System.Text;
 
 namespace Ogee.AI.Derp {
 
-    public static class ActivityManager {
-
-        private static Dictionary<string, Activity> _Activities = new Dictionary<string, Activity>();
-        public static Dictionary<string, Activity> Activities => _Activities;
-
-        public static Activity CreateActivity(string activityName, int inputLength, int outputLength, params int[] hiddenLayersSizes) {
-            if (_Activities.ContainsKey(activityName))
-                throw new Exception("Activity \"" + activityName + "\" already exists.");
-            Activity newActivity = new Activity(inputLength, outputLength, hiddenLayersSizes);
-            _Activities.Add(activityName, newActivity);
-            return newActivity;
-        }
-    }
-
     public class Activity {
 
         public delegate void TrainingInputPicker(int inputIndex, out double[] input, out double[] output);
@@ -106,24 +92,11 @@ namespace Ogee.AI.Derp {
             return (convergence < 1 + E && convergence > 1 - E);
         }
 
-        public class ActivityTrainingResult {
-            public double convergence;
-            public TimeSpan trainingTime;
-            public int trainings;
-            public int bestSeed;
+        const int SEED = 123456;
 
-            public override string ToString() {
-                StringBuilder strbldr = new StringBuilder();
-                strbldr.AppendLine("#--- Training Results ---#");
-                strbldr.AppendLine("Convergence : " + convergence);
-                strbldr.AppendLine("Training Time : " + trainingTime);
-                strbldr.AppendLine("Trainings : " + trainings);
-                strbldr.AppendLine("Best Seed : " + bestSeed);
-                return strbldr.ToString();
-            }
-        }
+        private double _customIndicator = 0;
 
-        public ActivityTrainingResult think(TrainingInputPicker getTrainingInput, TimeSpan timeOut, int startPoint = 1000) {
+        public ActivityTrainingResult think(TrainingInputPicker getTrainingInput, TimeSpan timeOut, int startPoints = 1000) {
 
             double[] input;
             double[] output;
@@ -131,11 +104,12 @@ namespace Ogee.AI.Derp {
             // Calibrating the seed
             // This operation is necessary to better optimize the starting point.
             // Without this, weights at initialization might make the model converge towards a bad solution.
+            Stopwatch swCalibration = Stopwatch.StartNew();
             int s = 0;
             int trainingsPerCalibration = 100;
             Dictionary<int, double> seeds = new Dictionary<int, double>();
-            Random seedGenerator = new Random();
-            for (int i = 0; i < startPoint; i++) {
+            Random seedGenerator = new Random(SEED);
+            for (int i = 0; i < startPoints; i++) {
                 int seed = seedGenerator.Next(int.MinValue, int.MaxValue);
                 if (seeds.ContainsKey(seed))
                     continue;
@@ -162,31 +136,34 @@ namespace Ogee.AI.Derp {
                 }
             }
             initializeWeights(true, bestSeed); // Initialize the weights for this better start point
+            swCalibration.Stop();
 
             // Training
             // Will stop learning if it converges already or if it went timeout 
+            Stopwatch swTraining = Stopwatch.StartNew();
             int trainings = 0;
             double maxMs = timeOut.TotalMilliseconds;
-            Stopwatch sw = Stopwatch.StartNew();
             while (true) {
                 getTrainingInput(trainings, out input, out output); // Picking a training data set
                 train(input, output); // Training
                 if (trainings % 100 == 0) {
                     if (_convergence < 1 + E && _convergence > 1 - E) {
                         break;
-                    } else if (sw.ElapsedMilliseconds > maxMs) {
+                    } else if (swTraining.ElapsedMilliseconds > maxMs) {
                         break;
                     }
                 }
                 trainings++;
             }
-            sw.Stop();
+            swTraining.Stop();
 
             return new ActivityTrainingResult() {
                 convergence = _convergence,
-                trainingTime = TimeSpan.FromMilliseconds(sw.ElapsedMilliseconds),
+                trainingTime = TimeSpan.FromMilliseconds(swTraining.ElapsedMilliseconds),
+                calibratingTime = TimeSpan.FromMilliseconds(swCalibration.ElapsedMilliseconds),
                 trainings = trainings,
                 bestSeed = bestSeed,
+                customIndicator = _customIndicator,
             };
         }
 
@@ -275,6 +252,7 @@ namespace Ogee.AI.Derp {
             }
             error /= result.Length; // Mean
             _convergence = error / _previousError;
+            _customIndicator = _customIndicator / 2 + _convergence - 1;
             _previousError = error;
             return error;
         }
