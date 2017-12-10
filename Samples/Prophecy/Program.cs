@@ -34,15 +34,15 @@ class Program {
 
         Console.ForegroundColor = ConsoleColor.DarkGray;
         foreach (double result in tenLastDays) {
-            dateToIndexPrediction.Add(angler.startOfPrediction.AddDays(-angler.daysToPredict + day++ - 1), result);
-            Console.WriteLine("BTC Value @ {0} : {1}", angler.startOfPrediction.AddDays(-angler.daysToPredict + day++).ToString("yyyy-MM-dd"), result);
+            dateToIndexPrediction.Add(angler.startOfPrediction.AddDays(-angler.daysToPredict + day++), result);
+            Console.WriteLine("BTC Value @ {0} : {1}", angler.startOfPrediction.AddDays(-angler.daysToPredict + day).ToString("yyyy-MM-dd"), result);
         }
 
         Console.ForegroundColor = ConsoleColor.Yellow;
         day = 0;
         foreach (double result in results) {
             dateToIndexPrediction.Add(angler.startOfPrediction.AddDays(day++), result);
-            Console.WriteLine("BTC Value @ {0} : {1}", angler.startOfPrediction.AddDays(day++).ToString("yyyy-MM-dd"), result);
+            Console.WriteLine("BTC Value @ {0} : {1}", angler.startOfPrediction.AddDays(day).ToString("yyyy-MM-dd"), result);
         }
 
         using (FileStream fs = new FileStream(@"result.xls", FileMode.Create)) {

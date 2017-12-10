@@ -64,6 +64,7 @@ namespace Ogee.AI.Derp {
         /// </summary>
         /// <param name="seed"></param>
         public void initializeWeights(bool randomWeights, int seed = 0) {
+            _customIndicator = 1;
             weights = new double[neurons.Length - 1][][];
             if (randomWeights) {
                 Random random = new Random(seed);
@@ -94,7 +95,7 @@ namespace Ogee.AI.Derp {
 
         const int SEED = 123456;
 
-        private double _customIndicator = 0;
+        private double _customIndicator = 1; // not 0 at initialization
 
         public ActivityTrainingResult think(TrainingInputPicker getTrainingInput, TimeSpan timeOut, int startPoints = 1000) {
 
@@ -113,13 +114,13 @@ namespace Ogee.AI.Derp {
                 int seed = seedGenerator.Next(int.MinValue, int.MaxValue);
                 if (seeds.ContainsKey(seed))
                     continue;
+                initializeWeights(true, seed);
                 for (int j = 0; j < trainingsPerCalibration; j++) {
-                    initializeWeights(true, seed);
                     getTrainingInput(j, out input, out output); // Picking a training data set
                     train(input, output); // Training (this is not the actual training, weights are changed afterwards)
                     if (j % (trainingsPerCalibration / 10) == 0) {
-                        if (_convergence < 1 + E && _convergence > 1 - E) {
-                            seeds.Add(seed, previousError); // Add the error for this seed
+                        if (_customIndicator < 0.1) {
+                            seeds.Add(seed, Math.Abs(_previousError)); // Add the error for this seed
                             goto startPointChecked;
                         }
                     }
@@ -135,6 +136,8 @@ namespace Ogee.AI.Derp {
                     bestSeed = pair.Key;
                 }
             }
+            if (min == double.MaxValue)
+                throw new Exception("Can't get a viable starting point");
             initializeWeights(true, bestSeed); // Initialize the weights for this better start point
             swCalibration.Stop();
 
@@ -147,7 +150,7 @@ namespace Ogee.AI.Derp {
                 getTrainingInput(trainings, out input, out output); // Picking a training data set
                 train(input, output); // Training
                 if (trainings % 100 == 0) {
-                    if (_convergence < 1 + E && _convergence > 1 - E) {
+                    if (_customIndicator < 0.01) {
                         break;
                     } else if (swTraining.ElapsedMilliseconds > maxMs) {
                         break;
@@ -252,7 +255,7 @@ namespace Ogee.AI.Derp {
             }
             error /= result.Length; // Mean
             _convergence = error / _previousError;
-            _customIndicator = _customIndicator / 2 + _convergence - 1;
+            _customIndicator = _customIndicator / 2 + Math.Abs(_convergence - 1);
             _previousError = error;
             return error;
         }
