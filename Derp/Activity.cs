@@ -1,31 +1,18 @@
 ﻿
 using System.Collections.Generic;
 using System;
+using System.Diagnostics;
+using System.Linq;
+using System.Text;
 
 namespace Ogee.AI.Derp {
 
-    public static class ActivityManager {
-
-        private static Dictionary<string, Activity> _Activities = new Dictionary<string, Activity>();
-        public static Dictionary<string, Activity> Activities => _Activities;
-
-        public static Activity CreateActivity(string activityName, int inputLength, int outputLength, params int[] hiddenLayersSizes) {
-            if (_Activities.ContainsKey(activityName))
-                throw new Exception("Activity \"" + activityName + "\" already exists.");
-            Activity newActivity = new Activity(inputLength, outputLength, hiddenLayersSizes);
-            _Activities.Add(activityName, newActivity);
-            return newActivity;
-        }
-    }
-
     public class Activity {
+
+        public delegate void TrainingInputPicker(int inputIndex, out double[] input, out double[] output);
 
         private const double COST_EXPONENT = 1;
         private const double QI_MAX = 160;
-        // Guarantees same results on each run (nice for debugging)
-        private const int RANDOM_SEED = 32145;
-
-        private Random random = new Random(RANDOM_SEED);
 
         private double[][] neurons;
         private double[][][] weights;
@@ -68,15 +55,119 @@ namespace Ogee.AI.Derp {
             }
 
             //-- WEIGHTS --
+            initializeWeights(false);
+        }
+
+        /// <summary>
+        /// Initialize all weights.
+        /// Value used
+        /// </summary>
+        /// <param name="seed"></param>
+        public void initializeWeights(bool randomWeights, int seed = 0) {
+            _customIndicator = 1;
             weights = new double[neurons.Length - 1][][];
-            for (int i = 0; i < weights.Length; i++) {
-                weights[i] = new double[neurons[i + 1].Length][];
-                for (int j = 0; j < neurons[i + 1].Length; j++) {
-                    // Initialize Weights from Neurons at i to Neurons at i + 1
-                    weights[i][j] = random.GetRandomArray(neurons[i].Length, -4d / neurons[i].Length, 4d / neurons[i].Length);
-                    //weights[i][j] = Extensions.GetFilledArray(neurons[i].Length, 0.5d);
+            if (randomWeights) {
+                Random random = new Random(seed);
+                for (int i = 0; i < weights.Length; i++) {
+                    weights[i] = new double[neurons[i + 1].Length][];
+                    for (int j = 0; j < neurons[i + 1].Length; j++) {
+                        weights[i][j] = random.GetRandomArray(neurons[i].Length, -4d / neurons[i].Length, 4d / neurons[i].Length);
+                    }
+                }
+            } else {
+                for (int i = 0; i < weights.Length; i++) {
+                    weights[i] = new double[neurons[i + 1].Length][];
+                    for (int j = 0; j < neurons[i + 1].Length; j++) {
+                        weights[i][j] = Extensions.GetFilledArray(neurons[i].Length, 0d);
+                    }
                 }
             }
+        }
+
+        const double E = 0.00001;
+
+        public bool isConvergent(double[] input, double[] output, int iterations = 100) {
+            for (int i = 0; i < iterations; i++) {
+                train(input, output);
+            }
+            return (convergence < 1 + E && convergence > 1 - E);
+        }
+
+        const int SEED = 123456;
+
+        private double _customIndicator = 1; // not 0 at initialization
+
+        public ActivityTrainingResult think(TrainingInputPicker getTrainingInput, TimeSpan timeOut, int startPoints = 1000) {
+
+            double[] input;
+            double[] output;
+
+            // Calibrating the seed
+            // This operation is necessary to better optimize the starting point.
+            // Without this, weights at initialization might make the model converge towards a bad solution.
+            Stopwatch swCalibration = Stopwatch.StartNew();
+            int s = 0;
+            int trainingsPerCalibration = 100;
+            Dictionary<int, double> seeds = new Dictionary<int, double>();
+            Random seedGenerator = new Random(SEED);
+            for (int i = 0; i < startPoints; i++) {
+                int seed = seedGenerator.Next(int.MinValue, int.MaxValue);
+                if (seeds.ContainsKey(seed))
+                    continue;
+                initializeWeights(true, seed);
+                for (int j = 0; j < trainingsPerCalibration; j++) {
+                    getTrainingInput(j, out input, out output); // Picking a training data set
+                    train(input, output); // Training (this is not the actual training, weights are changed afterwards)
+                    if (j % (trainingsPerCalibration / 10) == 0) {
+                        if (_customIndicator < 0.1) {
+                            seeds.Add(seed, Math.Abs(_previousError)); // Add the error for this seed
+                            goto startPointChecked;
+                        }
+                    }
+                }
+                seeds.Add(seed, double.MaxValue);
+                startPointChecked:;
+            }
+            int bestSeed = 0;
+            double min = double.MaxValue;
+            foreach (KeyValuePair<int, double> pair in seeds) {
+                if (pair.Value < min) {
+                    min = pair.Value;
+                    bestSeed = pair.Key;
+                }
+            }
+            if (min == double.MaxValue)
+                throw new Exception("Can't get a viable starting point");
+            initializeWeights(true, bestSeed); // Initialize the weights for this better start point
+            swCalibration.Stop();
+
+            // Training
+            // Will stop learning if it converges already or if it went timeout 
+            Stopwatch swTraining = Stopwatch.StartNew();
+            int trainings = 0;
+            double maxMs = timeOut.TotalMilliseconds;
+            while (true) {
+                getTrainingInput(trainings, out input, out output); // Picking a training data set
+                train(input, output); // Training
+                if (trainings % 100 == 0) {
+                    if (_customIndicator < 0.01) {
+                        break;
+                    } else if (swTraining.ElapsedMilliseconds > maxMs) {
+                        break;
+                    }
+                }
+                trainings++;
+            }
+            swTraining.Stop();
+
+            return new ActivityTrainingResult() {
+                convergence = _convergence,
+                trainingTime = TimeSpan.FromMilliseconds(swTraining.ElapsedMilliseconds),
+                calibratingTime = TimeSpan.FromMilliseconds(swCalibration.ElapsedMilliseconds),
+                trainings = trainings,
+                bestSeed = bestSeed,
+                customIndicator = _customIndicator,
+            };
         }
 
         private int _trainings = 0;
@@ -163,7 +254,8 @@ namespace Ogee.AI.Derp {
                 error += Math.Pow(Math.Abs(expected[i] - result[i]), COST_EXPONENT);
             }
             error /= result.Length; // Mean
-            _convergence = _previousError - error;
+            _convergence = error / _previousError;
+            _customIndicator = _customIndicator / 2 + Math.Abs(_convergence - 1);
             _previousError = error;
             return error;
         }
