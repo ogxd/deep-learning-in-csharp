@@ -73,8 +73,8 @@ namespace Ogee.AI.Derp {
                 weights[i] = new double[neurons[i + 1].Length][];
                 for (int j = 0; j < neurons[i + 1].Length; j++) {
                     // Initialize Weights from Neurons at i to Neurons at i + 1
-                    //weights[i][j] = random.GetRandomArray(neurons[i].Length, -4d / neurons[i].Length, 4d / neurons[i].Length);
-                    weights[i][j] = Extensions.GetFilledArray(neurons[i].Length, 0.5d);
+                    weights[i][j] = random.GetRandomArray(neurons[i].Length, -4d / neurons[i].Length, 4d / neurons[i].Length);
+                    //weights[i][j] = Extensions.GetFilledArray(neurons[i].Length, 0.5d);
                 }
             }
         }

@@ -61,8 +61,10 @@ class Program {
         double[] results = activity.guess(recent);
         results.Multiply(max);
 
+        int day = 0;
         foreach (double result in results) {
-            Console.WriteLine("BTC Value @ {0} : {1}", startOfPrediction.AddDays(1).ToString("yyyy-MM-dd"), result);
+            day++;
+            Console.WriteLine("BTC Value @ {0} : {1}", startOfPrediction.AddDays(day).ToString("yyyy-MM-dd"), result);
         }
 
         Console.ReadKey();
